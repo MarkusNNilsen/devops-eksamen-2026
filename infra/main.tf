@@ -36,6 +36,12 @@ resource "aws_iam_role_policy" "task" {
         Effect   = "Allow"
         Action   = "bedrock:InvokeModel"
         Resource = "*"
+      },
+
+      {
+        Effect   = "Allow"
+        Action   = "cloudwatch:PutMetricData"
+        Resource = "*"
       }
     ]
   })
@@ -55,6 +61,11 @@ resource "aws_ecs_express_gateway_service" "app" {
     environment {
       name  = "S3_BUCKET"
       value = aws_s3_bucket.images.bucket
+    }
+
+    environment {
+      name  = "METRICS_NAMESPACE"
+      value = "wishifai-${var.candidate}"
     }
   }
 
