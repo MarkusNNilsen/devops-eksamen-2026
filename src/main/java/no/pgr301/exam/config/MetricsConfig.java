@@ -20,16 +20,16 @@ public class MetricsConfig {
     }
 
     @Bean
-    public CloudWatchConfig cloudWatchConfig() {
+    public CloudWatchConfig cloudWatchConfig(@Value("${app.metrics.cloudwatch.namespace}") String namespace) {
         return new CloudWatchConfig() {
             @Override
             public String get(String key) {
                 return null;
             }
-
+            
             @Override
             public String namespace() {
-                return "";
+                return namespace;
             }
 
             @Override
