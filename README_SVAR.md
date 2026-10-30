@@ -63,3 +63,52 @@ Hvert image får to tags:
   ved hver push. Da vet jeg ikke hvilken commit som kjører i produksjon, jeg kan
   ikke rulle tilbake til en bestemt versjon, og ECS ser ingen endring når taggen
   er lik som sist.
+
+## Oppgave 2 – ECS Express og IaC
+
+### 2A – Infrastruktur
+
+Terraform-koden ligger i [`infra/`](infra/). Den oppretter:
+
+- en ECS Express-tjeneste (`wishifai-18`) med offentlig endepunkt
+- en S3-bucket for bildene (`wishifai-images-18`)
+- en task role (`wishifai-task-role-18`) med tillatelser til S3 (`PutObject` på kun denne bucketen), Rekognition (`DetectLabels`) og Bedrock (`InvokeModel`)
+
+Execution role og infrastructure role er de eksisterende rollene fra oppgaven. `S3_BUCKET` settes på tjenesten fra Terraform-ressursen, så bucket-navnet bare står ett sted.
+
+**Offentlig URL:** https://wi-18457fa54bc74920bead38f9c980a621.ecs.eu-west-1.on.aws
+
+Roten (`/`) har ingen side og gir 404. Test med:
+
+```bash
+curl https://wi-18457fa54bc74920bead38f9c980a621.ecs.eu-west-1.on.aws/api/health
+curl -F "image=@samples/sample_image.png" https://wi-18457fa54bc74920bead38f9c980a621.ecs.eu-west-1.on.aws/api/analyze
+```
+
+### 2B – Remote state
+
+State lagres i den delte bucketen `pgr301-terraform-state` med nøkkelen:
+
+```
+wishifai/18/terraform.tfstate
+```
+
+Nøkkelen inneholder kandidatnummeret, så state ikke overskrives av andre kandidater. Backend-konfigurasjonen ligger i [`infra/backend.tf`](infra/backend.tf).
+
+### 2C – GitHub Actions-job for Terraform
+
+**Workflow:** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+**Grønn kjøring:** https://github.com/MarkusNNilsen/devops-eksamen-2026/actions/runs/41138404062
+
+Workflowen har to jobber i samme fil:
+
+1. `build-push` bygger Docker-imaget og pusher det til ECR. Jobben sender adressen til imaget (med commit-SHA som tag) videre som job-output.
+2. `terraform` har `needs: build-push`, så den starter først når build-jobben er ferdig og grønn. Den kjører `terraform fmt -check`, `terraform init` og `terraform apply` mot `infra/`, og gir imaget fra build-jobben til Terraform som `image`-variabel. AWS-nøklene hentes fra GitHub Secrets, på samme måte som i 1B.
+
+Pipelinen feiler hvis Terraform-koden ikke er riktig formatert, siden `terraform fmt -check` avslutter med en feilkode når en fil trenger formatering.
+
+#### Hvorfor Terraform kjører etter container-build
+
+- Imaget med riktig tag må finnes i ECR før ECS prøver å hente det. Kjører Terraform først eller parallelt, kan tjenesten peke på et image som ikke finnes ennå, og deployen feiler.
+- Adressen til imaget er et resultat av build-jobben (SHA-taggen), så Terraform kan ikke få den uten å vente.
+- Med `needs:` stopper pipelinen hvis build feiler, så en ødelagt versjon aldri blir deployet.
