@@ -24,7 +24,8 @@ jobs:
 
       - name: Build and push
         env:
-          IMAGE: ${{ steps.ecr_login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          IMAGE_BASE: ${{ steps.ecr_login.outputs.registry }}/${{ env.ECR_REPOSITORY }}
         run: |
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
+          docker build -t "$IMAGE_BASE:${{ github.sha }}" -t "$IMAGE_BASE:latest" .
+          docker push "$IMAGE_BASE:${{ github.sha }}"
+          docker push "$IMAGE_BASE:latest"
