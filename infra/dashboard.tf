@@ -47,16 +47,20 @@ resource "aws_cloudwatch_dashboard" "main" {
         width  = 12
         height = 6
         properties = {
-          title  = "Svartid: Bedrock og Rekognition (ms)"
+          title  = "Svartid: Bedrock (venstre) og Rekognition (høyre), ms"
           region = var.aws_region
           stat   = "Average"
           period = 60
           metrics = [
             [local.metrics_namespace, "bedrock.duration.avg"],
             [local.metrics_namespace, "bedrock.duration.max", { stat = "Maximum" }],
-            [local.metrics_namespace, "rekognition.duration.avg"],
-            [local.metrics_namespace, "rekognition.duration.max", { stat = "Maximum" }]
+            [local.metrics_namespace, "rekognition.duration.avg", { yAxis = "right" }],
+            [local.metrics_namespace, "rekognition.duration.max", { stat = "Maximum", yAxis = "right" }]
           ]
+          yAxis = {
+            left  = { min = 0 }
+            right = { min = 0 }
+          }
         }
       },
       {
