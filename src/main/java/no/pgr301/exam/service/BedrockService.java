@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.ConverseResponse;
 import software.amazon.awssdk.services.bedrockruntime.model.Message;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.Counter;
 
 import java.util.List;
 import java.util.regex.Matcher;
@@ -101,7 +102,14 @@ public class BedrockService {
                         .content(ContentBlock.fromText(prompt))
                         .build())
                 .build()));
-
+        Counter.builder("bedrock.tokens.input")
+            .description("Antall input-tokens sendt til Bedrock")
+            .register(registry)
+            .increment(resp.usage().inputTokens());
+        Counter.builder("bedrock.tokens.output")
+            .description("Antall output-tokens mottatt fra Bedrock")
+            .register(registry)
+            .increment(resp.usage().outputTokens());
         String text = resp.output().message().content().get(0).text();
         return parseAnalysis(text);
     }

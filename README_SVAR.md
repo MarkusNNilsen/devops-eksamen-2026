@@ -25,7 +25,7 @@ Appen lytter på port 8080 inni containeren, og `-p 9999:8080` gjør den tilgjen
 docker run -p 9999:8080 -v ~/.aws:/root/.aws:ro wishifai
 ```
 
-**Alternativ B: AWS-nøkler som miljøvariabler **
+**Alternativ B: AWS-nøkler som miljøvariabler**
 
 ```bash
 docker run -p 9999:8080 \
