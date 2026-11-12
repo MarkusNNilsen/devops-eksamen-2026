@@ -1,5 +1,12 @@
 # Besvarelse – PGR301 Eksamen 2026
 
+**Kandidatnummer:** 18
+
+**Offentlig URL til tjenesten:** https://wi-18457fa54bc74920bead38f9c980a621.ecs.eu-west-1.on.aws
+
+Test med `/api/health` (roten gir 404). Detaljer i oppgave 2A.
+
+
 ## Oppgave 1 – Container og CI
 
 ### 1A – Containerisering
@@ -35,25 +42,25 @@ docker run -p 9999:8080 \
   wishifai
 ```
 
-## Oppgave 1B – GitHub Actions og ECR
+### 1B – GitHub Actions og ECR
 
 **Workflow:** `.github/workflows/deploy.yml`
 **Grønn kjøring:** https://github.com/MarkusNNilsen/devops-eksamen-2026/actions/runs/41107439479
 
-### Hva workflowen gjør
+#### Hva workflowen gjør
 Ved push til `main` bygger workflowen Docker-imaget og publiserer det til
 ECR-repoet `wishifai-mnn-wishifai` i eu-west-1. Den kjører kun på push til `main`.
 
-### Secrets
+#### Secrets
 AWS-nøklene ligger i GitHub Secrets (`AWS_ACCESS_KEY_ID` og
 `AWS_SECRET_ACCESS_KEY`) og leses via `${{ secrets.* }}`. De ligger ikke i koden.
 
-### Tagging-strategi
+#### Tagging-strategi
 Hvert image får to tags:
 - **Commit-SHA** (`github.sha`)
 - **`latest`**
 
-### Begrunnelse
+#### Begrunnelse
 - **Commit-SHA** er unik per commit og sporbar til nøyaktig hvilken kode som
   kjører. Den endres aldri, så den gir trygge rollbacks.
 - **`latest`** peker alltid på siste build, så det er enkelt å hente ut nyeste
@@ -64,6 +71,7 @@ Hvert image får to tags:
   ikke rulle tilbake til en bestemt versjon, og ECS ser ingen endring når taggen
   er lik som sist.
 
+
 ## Oppgave 2 – ECS Express og IaC
 
 ### 2A – Infrastruktur
@@ -72,9 +80,11 @@ Terraform-koden ligger i [`infra/`](infra/). Den oppretter:
 
 - en ECS Express-tjeneste (`wishifai-18`) med offentlig endepunkt
 - en S3-bucket for bildene (`wishifai-images-18`)
-- en task role (`wishifai-task-role-18`) med tillatelser til S3 (`PutObject` på kun denne bucketen), Rekognition (`DetectLabels`) og Bedrock (`InvokeModel`)
+- en task role (`wishifai-task-role-18`) med tillatelser til S3 (`PutObject` på kun denne bucketen), Rekognition (`DetectLabels`), Bedrock (`InvokeModel`) og CloudWatch (`PutMetricData`)
 
 Execution role og infrastructure role er de eksisterende rollene fra oppgaven. `S3_BUCKET` settes på tjenesten fra Terraform-ressursen, så bucket-navnet bare står ett sted.
+
+Task role har bare de tillatelsene appen trenger, og S3-tilgangen gjelder kun vår egen bucket. For Rekognition og CloudWatch går det ikke an å begrense hvilke ressurser rollen får bruke, og for Bedrock er det tungvint. Derfor har disse tillatelse til alle ressurser.
 
 **Offentlig URL:** https://wi-18457fa54bc74920bead38f9c980a621.ecs.eu-west-1.on.aws
 
@@ -107,11 +117,12 @@ Workflowen har to jobber i samme fil:
 
 Pipelinen feiler hvis Terraform-koden ikke er riktig formatert, siden `terraform fmt -check` avslutter med en feilkode når en fil trenger formatering.
 
-##### Hvorfor Terraform kjører etter container-build
+#### Hvorfor Terraform kjører etter container-build
 
 - Imaget med riktig tag må finnes i ECR før ECS prøver å hente det. Kjører Terraform først eller parallelt, kan tjenesten peke på et image som ikke finnes ennå, og deployen feiler.
 - Adressen til imaget er et resultat av build-jobben (SHA-taggen), så Terraform kan ikke få den uten å vente.
 - Med `needs:` stopper pipelinen hvis build feiler, så en ødelagt versjon aldri blir deployet.
+
 
 ## Oppgave 3 – Observability
 
@@ -153,21 +164,22 @@ Dashboardet `wishifai-18` og alarmen er definert som Terraform i [`infra/dashboa
 
 **Alarm 1 (`wishifai-18-bedrock-slow`):** går av når gjennomsnittlig `bedrock.duration` er over 20 sekunder i fem minutter. Bedrock dominerer svartiden, så en økning er det første tegnet på at brukerne får en treg tjeneste. Normalnivået er ca. 15 s, og terskelen ligger omtrent 35 % over, så den ikke går av ved vanlig drift. Uten trafikk finnes det ingen data, og alarmen blir stående i OK (`treat_missing_data = notBreaching`). Alarmen har ingen varslingskanal (SNS/e-post), siden oppgaven bare ber om en alarm på en egen metrikk.
 
-**Alarm 2 (`wishifai-18-token-spike`):** går av når summen av output-tokens fra Bedrock er over X tokens på fem minutter. Bedrock faktureres per token, så en plutselig topp kan bety spam eller en feil som sender uvanlig lange prompter. Terskelen er satt til omtrent N ganger høyeste vanlige testtrafikk. Alarmen oppdager misbruk, men stopper det ikke. Selve beskyttelsen ville vært rate limiting.
+**Alarm 2 (`wishifai-18-token-spike`):** går av når summen av output-tokens fra Bedrock er over 30k tokens på fem minutter. Bedrock faktureres per token, så en plutselig topp kan bety spam eller at modellen gir uvanlig lange svar. Terskelen ligger omtrent dobbelt så høyt som det travleste femminuttersvinduet under testingen (ca. 13 000) og om lag fem ganger vanlig testtrafikk (ca. 6 500). Alarmen kan også gå av ved vanlig vekst i bruk, og den oppdager misbruk uten å stoppe det. Selve beskyttelsen ville vært rate limiting.
+
 
 ## Oppgave 4 – Drøfting
 
 ### Testing
 
-Ved ikke-deterministisk output kan man ikke teste at svaret er identisk, bare at det har riktige egenskaper, og man må måle andelen som består over mange kjøringer i stedet for ett enkelt resultat. Wishifai har ingen tester i dag. Det jeg ville innført først er enhetstester av de deterministiske delene, som parsingen av Bedrock-svaret, med mock av Bedrock. Kvalitet kan testes med et eval-sett: faste input, for eksempel objektlister fra barnerom, hvor man sjekker at forslagene ikke er farlige eller aldersupassende. Sjekken kan være en ordliste, som er billig men lett å omgå og gir falske treff: en motorsag passer fint i bestefars bod, men ikke i barnebarnets rom, og en ordliste ser ikke forskjellen. Sjekken kan også være en LLM-as-judge som forstår sammenheng, men den kan også ta feil og må valideres mot menneskelig vurdering. Eval-settet bør kjøres som en gate i pipelinen før deploy, og når prompt eller modell endres, med en terskel for andel bestått. Siden en test aldri kan bevise at noe aldri skjer, må den suppleres med filter i produksjon og stikkprøver.
+Ved ikke-deterministisk output kan man ikke teste at svaret er identisk, bare at det har riktige egenskaper og man må måle andelen som består over mange kjøringer. Wishifai har ingen tester i dag. Jeg ville innført enhetstester av de deterministiske delene, som parsingen av Bedrock-svaret, med mock. Kvalitet kan testes med et eval-sett med fast input, for eksempel objektlister fra barnerom, hvor man sjekker at forslagene ikke er farlige eller aldersupassende. Sjekken kan være en ordliste, som er billig men lett å omgå og gir falske treff: en motorsag passer fint i bestefars bod men ikke i barnebarnets rom, og en ordliste ser ikke forskjellen. Alternativt kan en LLM-as-judge vurdere sammenhengen, men den må valideres mot menneskelig vurdering da den også kan ta feil. Eval-settet bør kjøres som en gate i pipelinen før deploy, og når prompt eller modell endres, med en terskel for andel bestått. Siden en test aldri kan bevise at noe aldri skjer, må den suppleres med filter i produksjon og stikkprøver.
 
 ### Kontinuerlig leveranse
 
-Ved bruk generativ AI består en leveranse av mer enn kode: prompt og modellversjon kan endres uavhengig av koden og endrer atferden like mye. Alt må versjoneres og kunne rulles tilbake. I Wishifai gir commit-SHA på imaget rollback, og modell-ID kan settes via en miljøvariabel. ECS Express ruller ut gradvis, men sjekker bare teknisk helse, ikke om svarene er gode. Ved høy risiko bør nye prompter og modeller først gå til en liten andel av trafikken (canary) og passere eval-settet.
+Ved bruk av AI består en leveranse av mer enn kode: prompt og modellversjon kan endres uavhengig av koden og endrer atferden like mye. Alt må versjoneres og kunne rulles tilbake. I Wishifai gir commit-SHA på imaget rollback, og modell-ID kan settes via en miljøvariabel. ECS Express ruller ut gradvis, men sjekker bare teknisk helse, ikke om svarene er gode. Ved høy risiko bør nye prompter og modeller først gå til en liten andel av trafikken (canary) og passere eval-settet.
 
 ### Risiko og ansvar
 
-Siden en LLM aldri blir feilfri, er målet ikke å eliminere feil, men å redusere sannsynligheten, begrense konsekvensen og oppdage feil raskt. Praksisene må derfor skaleres med hva en feil koster. For en gaveapp som Wishifai kan man akseptere at enkelte upassende forslag slipper gjennom og rettes etter tilbakemeldinger. I en bank eller medisinsk setting er konsekvensen så alvorlig at det trengs strengere gates før produksjon, større eval-sett og et menneske i loopen som godkjenner endringer i prompt og modell, og som vurderer svar før de når kunden. Ansvaret kan ikke overlates til modellen. Organisasjonen som leverer tjenesten har ansvaret for resultatet, og må kunne forklare og etterprøve hva som ble svart, blant annet gjennom logging.
+Siden en LLM aldri blir feilfri, er ikke målet å eliminere feil, men å redusere sannsynligheten og oppdage feil raskt. Praksisene må derfor skaleres med hva en feil koster. For en gaveapp som Wishifai kan man akseptere at enkelte upassende forslag slipper gjennom og rettes etter tilbakemeldinger. I en bank eller medisinsk setting er konsekvensen så alvorlig at det trengs strengere krav før produksjon, større eval-sett og et menneske i loopen som godkjenner endringer i prompt og modell og som vurderer svar før de når kunden. Ansvaret kan ikke overlates til modellen. Organisasjonen som leverer tjenesten har ansvaret for resultatet, og må kunne forklare og etterprøve hva som ble svart, blant annet gjennom logging.
 
 ### Overvåking
 
