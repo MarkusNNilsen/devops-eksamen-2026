@@ -3,6 +3,7 @@ variable "aws_region" {
   default = "eu-west-1"
 }
 
+# Full adresse til imaget i ECR, satt av pipelinen med commit-SHA som tag
 variable "image" {
   type = string
 }

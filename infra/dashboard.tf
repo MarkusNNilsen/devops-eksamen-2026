@@ -1,7 +1,7 @@
 locals {
   metrics_namespace = "wishifai-${var.candidate}"
 }
-
+# CloudWatch-dashboard med business-, infrastruktur- og applikasjonsmetrics.
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "wishifai-${var.candidate}"
 
@@ -89,6 +89,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "Applikasjon: JVM heap-minne brukt"
           region = var.aws_region
           period = 60
+          # Disse metrikkene har mange varianter, så SEARCH finner dem alle i stedet for at vi lister dem
           metrics = [
             [{
               expression = "SEARCH('{\"${local.metrics_namespace}\",area,id} MetricName=\"jvm.memory.used.value\" area=\"heap\"', 'Average', 60)"

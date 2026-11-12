@@ -167,11 +167,13 @@ Dashboardet `wishifai-18` og alarmen er definert som Terraform i [`infra/dashboa
 **Alarm 2 (`wishifai-18-token-spike`):** går av når summen av output-tokens fra Bedrock er over 30k tokens på fem minutter. Bedrock faktureres per token, så en plutselig topp kan bety spam eller at modellen gir uvanlig lange svar. Terskelen ligger omtrent dobbelt så høyt som det travleste femminuttersvinduet under testingen (ca. 13 000) og om lag fem ganger vanlig testtrafikk (ca. 6 500). Alarmen kan også gå av ved vanlig vekst i bruk, og den oppdager misbruk uten å stoppe det. Selve beskyttelsen ville vært rate limiting.
 
 
+
+
 ## Oppgave 4 – Drøfting
 
 ### Testing
 
-Ved ikke-deterministisk output kan man ikke teste at svaret er identisk, bare at det har riktige egenskaper og man må måle andelen som består over mange kjøringer. Wishifai har ingen tester i dag. Jeg ville innført enhetstester av de deterministiske delene, som parsingen av Bedrock-svaret, med mock. Kvalitet kan testes med et eval-sett med fast input, for eksempel objektlister fra barnerom, hvor man sjekker at forslagene ikke er farlige eller aldersupassende. Sjekken kan være en ordliste, som er billig men lett å omgå og gir falske treff: en motorsag passer fint i bestefars bod men ikke i barnebarnets rom, og en ordliste ser ikke forskjellen. Alternativt kan en LLM-as-judge vurdere sammenhengen, men den må valideres mot menneskelig vurdering da den også kan ta feil. Eval-settet bør kjøres som en gate i pipelinen før deploy, og når prompt eller modell endres, med en terskel for andel bestått. Siden en test aldri kan bevise at noe aldri skjer, må den suppleres med filter i produksjon og stikkprøver.
+Ved ikke-deterministisk output kan man ikke teste at svaret er identisk, bare at det har riktige egenskaper og man må måle andelen som består over mange kjøringer. Wishifai har ingen tester i dag. Jeg ville innført enhetstester av de deterministiske delene, som parsingen av Bedrock-svaret, med mock. Kvalitet kan testes med et eval-sett med fast input, for eksempel objektlister fra barnerom, hvor man sjekker at forslagene ikke er farlige eller aldersupassende. Sjekken kan være en ordliste, som er billig men lett å omgå og gir falske treff: en motorsag passer fint i bestefars bod men ikke i barnebarnets rom, og en ordliste ser ikke forskjellen. Alternativt kan en LLM-as-judge vurdere sammenhengen, men den må valideres mot menneskelig vurdering da den også kan ta feil. Eval-settet bør kjøres som en gate i pipelinen før deploy, og når prompt eller modell endres
 
 ### Kontinuerlig leveranse
 
@@ -179,8 +181,12 @@ Ved bruk av AI består en leveranse av mer enn kode: prompt og modellversjon kan
 
 ### Risiko og ansvar
 
-Siden en LLM aldri blir feilfri, er ikke målet å eliminere feil, men å redusere sannsynligheten og oppdage feil raskt. Praksisene må derfor skaleres med hva en feil koster. For en gaveapp som Wishifai kan man akseptere at enkelte upassende forslag slipper gjennom og rettes etter tilbakemeldinger. I en bank eller medisinsk setting er konsekvensen så alvorlig at det trengs strengere krav før produksjon, større eval-sett og et menneske i loopen som godkjenner endringer i prompt og modell og som vurderer svar før de når kunden. Ansvaret kan ikke overlates til modellen. Organisasjonen som leverer tjenesten har ansvaret for resultatet, og må kunne forklare og etterprøve hva som ble svart, blant annet gjennom logging.
+Siden en LLM aldri blir feilfri, er ikke målet å eliminere feil, men å redusere sannsynligheten og oppdage feil raskt. For en gaveapp som Wishifai kan man akseptere at enkelte upassende forslag slipper gjennom og rettes etter tilbakemeldinger. I en bank eller medisinsk setting er konsekvensen så alvorlig at det trengs strengere krav før produksjon, større eval-sett og et menneske i loopen som godkjenner endringer i prompt og modell og som vurderer svar før de når kunden. Ansvaret kan ikke overlates til modellen. Organisasjonen har ansvaret for resultatet og må kunne etterprøve hva som ble svart, blant annet gjennom logging.
 
 ### Overvåking
 
-Jeg har to alarmer: en på Bedrock-svartid over 20 sekunder og en på tokenforbruk som varsler ved uvanlig mange output-tokens og som kan avsløre spam eller at modellen plutselig gir uvanlig lange svar. Token-alarmen kunne vært kombinert med antall ulike brukere, slik at man ser om økningen kommer fra mange eller fra en avsender, og dermed kan skille spam fra vanlig vekst. Latens, feilrater og kostnad viser om tjenesten fungerer, ikke om svaret er bra, så kvalitet må overvåkes med egne signaler. Indirekte signaler er andelen svar som ikke kan parses, svarlengde og tokens per forespørsel, som kan avsløre drift etter en modelloppdatering. Direkte signaler er tilbakemeldinger fra brukere og stikkprøver som vurderes av mennesker eller en LLM-as-judge.
+Jeg har to alarmer: en på Bedrock-svartid over 20 sekunder og en på tokenforbruk som varsler ved uvanlig mange output-tokens og som kan avsløre spam eller at modellen plutselig gir uvanlig lange svar. Token-alarmen kunne vært kombinert med antall ulike brukere for å skille spam fra  vanlig vekst. Latens, feilrater og kostnad viser om tjenesten fungerer, ikke om svaret er bra, så kvalitet må overvåkes med egne signaler. Indirekte signaler er andelen svar som ikke kan parses, svarlengde og tokens per forespørsel, som kan avsløre drift etter en modelloppdatering. Direkte signaler er tilbakemeldinger fra brukere og stikkprøver som vurderes av mennesker eller en LLM-as-judge.
+
+### Konklusjon
+
+AI funksjonalitet gjør ikke DevOps-praksisene overflødige, men flytter fokus fra å sjekke at koden fungerer til å sjekke at svarene er gode. Jo høyere risiko, desto mer må testes før produksjon, og desto viktigere blir mennesker i loopen.
